@@ -18,7 +18,6 @@ function StopProctor({ setStep, proctor }: Props) {
 		}
 	}
 
-
 	return (
 		<>
 			<div className="mb-5 p-5 border border-gray-200 rounded-lg bg-gray-50">
@@ -36,7 +35,7 @@ function StopProctor({ setStep, proctor }: Props) {
 					</button>
 					<button
 						id="resetSDK"
-						onClick={async () => {await stopProctoring(); setStep("1");}}						
+						onClick={async () => { await stopProctoring(); setStep("1"); }}
 						className="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2 rounded-md font-medium shadow-sm hover:shadow transition disabled:bg-gray-400 disabled:cursor-not-allowed"
 					>
 						Reset SDK

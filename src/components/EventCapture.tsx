@@ -14,6 +14,7 @@ function EventCapture({ proctor }: Props) {
   const [eventDataText, setEventDataText] = useState(JSON.stringify(eventData, null, 2));
   const [status, setStatus] = useState("")
 
+  
   function handleEventDataChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setEventDataText(e.target.value);
     try {
