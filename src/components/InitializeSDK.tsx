@@ -12,7 +12,7 @@ function InitializeSDK() {
 
   async function initializeSDK(): Promise<void> {
     try {
-      tpSentinelSDK.initialize(organizationID);
+      await tpSentinelSDK.initialize(organizationID);
       setStatus("SDK initialized successfully!")
     } catch (error) {
       setStatus(String(error));

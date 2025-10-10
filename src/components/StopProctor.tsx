@@ -10,7 +10,6 @@ function StopProctor({ setStep, proctor }: Props) {
 	const [status, setStatus] = useState("");
 
 	async function stopProctoring(): Promise<void> {
-		console.log('proc stopped')
 		try {
 			await proctor.stop();
 			setStatus("Proctoring stopped");
@@ -45,7 +44,7 @@ function StopProctor({ setStep, proctor }: Props) {
 				</div>
 
 				{status && (
-					<div id="proctorStatus" className="mt-3">
+					<div className="mt-3">
 						<div className="px-3 py-2 rounded font-medium mt-2 bg-gray-100 text-gray-700 border border-gray-300">
 							{status}
 						</div>

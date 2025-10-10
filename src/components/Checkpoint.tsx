@@ -23,7 +23,7 @@ function Checkpoint({ proctor }: Props) {
     }
   }
 
-  async function completeCheckPoint(): Promise<void> {
+  async function completeCheckpoint(): Promise<void> {
     try {
       await proctor.completeCheckpoint(checkpointId);
       setStatus(`Checkpoint completed: ${checkpointId}`)
@@ -70,12 +70,12 @@ function Checkpoint({ proctor }: Props) {
           <button id="setCheckpointBtn" onClick={setCheckpoint}
             className="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2 rounded-md font-medium shadow-sm hover:shadow transition disabled:bg-gray-400 disabled:cursor-not-allowed">Set
             Checkpoint</button>
-          <button id="completeCheckpointBtn" onClick={completeCheckPoint}
+          <button id="completeCheckpointBtn" onClick={completeCheckpoint}
             className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md font-medium shadow-sm hover:shadow transition disabled:bg-gray-400 disabled:cursor-not-allowed">Complete
             Checkpoint</button>
         </div>
         {status && (
-          <div id="proctorStatus" className="mt-3">
+          <div className="mt-3">
             <div className="px-3 py-2 rounded font-medium mt-2 bg-gray-100 text-gray-700 border border-gray-300">
               {status}
             </div>

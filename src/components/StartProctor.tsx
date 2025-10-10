@@ -95,7 +95,7 @@ function StartProctor({ setStep, setProctor }: Props) {
       </div>
 
       {status && (
-        <div id="proctorStatus" className="mt-3">
+        <div className="mt-3">
           <div className="px-3 py-2 rounded font-medium mt-2 bg-gray-100 text-gray-700 border border-gray-300">
             {status}
           </div>

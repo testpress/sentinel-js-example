@@ -14,12 +14,12 @@ function EventCapture({ proctor }: Props) {
   const [eventDataText, setEventDataText] = useState(JSON.stringify(eventData, null, 2));
   const [status, setStatus] = useState("")
 
-  function handlePoliciesChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+  function handleEventDataChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setEventDataText(e.target.value);
     try {
       const parsed = JSON.parse(e.target.value);
       setEventData(parsed);
-      setStatus(`Event captured: ${eventName}`);
+      setStatus("");
     } catch (error) {
       setStatus(String(error));
     }
@@ -50,7 +50,7 @@ function EventCapture({ proctor }: Props) {
             <textarea
               id="eventData"
               value={eventDataText}
-              onChange={handlePoliciesChange}
+              onChange={handleEventDataChange}
               rows={6}
               spellCheck={false}
               className="flex-1 p-3 min-h-[120px] font-mono rounded bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y"
@@ -61,7 +61,7 @@ function EventCapture({ proctor }: Props) {
           className="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2 rounded-md font-medium shadow-sm hover:shadow transition disabled:bg-gray-400 disabled:cursor-not-allowed">Capture
           Event</button>
         {status && (
-          <div id="proctorStatus" className="mt-3">
+          <div className="mt-3">
             <div className="px-3 py-2 rounded font-medium mt-2 bg-gray-100 text-gray-700 border border-gray-300">
               {status}
             </div>
