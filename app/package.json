@@ -9,8 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@testpress/sentinel-core": "file:/home/hari/workspace/sentinel_orchestrator/sdk/dist/npm/core/testpress-sentinel-core-1.0.3.tgz",
-    "@testpress/sentinel-ui": "file:/home/hari/workspace/sentinel_orchestrator/sdk/dist/npm/ui/testpress-sentinel-ui-1.0.0.tgz",
+    "@testpress/sentinel-core": "1.0.3",
+    "@testpress/sentinel-ui": "1.0.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
