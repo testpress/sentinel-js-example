@@ -1,0 +1,9 @@
+/*
+  X-Content-Type-Options: nosniff
+
+/assets/*
+  Cache-Control: no-cache, no-store, must-revalidate
+
+*.wasm
+  Content-Type: application/wasm
+  Cache-Control: no-cache, no-store, must-revalidate
