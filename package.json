@@ -1,0 +1,30 @@
+{
+  "name": "sentinel-demo",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@testpress/sentinel-core": "file:/home/hari/workspace/sentinel_orchestrator/sdk/dist/npm/core/testpress-sentinel-core-1.0.3.tgz",
+    "@testpress/sentinel-ui": "file:/home/hari/workspace/sentinel_orchestrator/sdk/dist/npm/ui/testpress-sentinel-ui-1.0.0.tgz",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.4",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "tailwindcss": "^4.1.4",
+    "typescript": "~5.8.3",
+    "vite": "^6.3.2"
+  },
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=10.0.0"
+  },
+  "packageManager": "pnpm@10.10.0"
+}
