@@ -1,222 +1,212 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import type { SessionState } from '@testpress/sentinel-core'
 import { Sentinel } from '@testpress/sentinel-core'
 import { mountSentinelOverlay } from '@testpress/sentinel-ui'
-import type { SessionState } from '@testpress/sentinel-core'
+import type { DemoConfig, LogEntry, WildcardSentinel } from './types'
+import { DevHero } from './components/DevHero'
+import { ConfigPanel } from './components/ConfigPanel'
+import { StatePanel } from './components/StatePanel'
+import { EventLogPanel } from './components/EventLogPanel'
 
-type LogEntry = { time: string; message: string }
+const DEFAULTS: DemoConfig = {
+  orgCode: 'b2zbsp',
+  sessionId: '12fd02aa-024e-4937-921f-10c2030328d7',
+  token: '7b832cbb-7ce7-4db9-a35f-f7a7d6c1ee80',
+  apiBaseURL: 'https://app.tpsentinel.com',
+}
 
-const STORAGE_KEY = 'sentinel-demo-creds'
+function readConfigFromQuery(): DemoConfig {
+  const params = new URLSearchParams(window.location.search)
+  return {
+    orgCode: params.get('orgCode') || params.get('org_code') || DEFAULTS.orgCode,
+    sessionId: params.get('sessionId') || params.get('session_id') || DEFAULTS.sessionId,
+    token: params.get('token') || DEFAULTS.token,
+    apiBaseURL: params.get('apiBaseURL') || params.get('baseURL') || params.get('baseUrl') || DEFAULTS.apiBaseURL,
+  }
+}
 
-function loadSaved() {
+function formatEventDetail(payload: unknown): string {
+  if (payload === undefined) return 'No payload'
+  if (typeof payload === 'string') return payload
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch {}
-  return { orgCode: '', sessionId: '', token: '' }
-}
-
-function save(orgCode: string, sessionId: string, token: string) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ orgCode, sessionId, token }))
-}
-
-const BADGES: Record<SessionState, { bg: string; label: string }> = {
-  idle:               { bg: 'bg-zinc-700', label: 'Idle' },
-  ready:              { bg: 'bg-sky-500', label: 'Ready' },
-  'setup-in-progress':{ bg: 'bg-amber-500', label: 'Setup…' },
-  running:            { bg: 'bg-emerald-500', label: 'Running' },
-  paused:             { bg: 'bg-amber-500', label: 'Paused' },
-  stopped:            { bg: 'bg-red-500', label: 'Stopped' },
-  failed:             { bg: 'bg-red-600', label: 'Failed' },
-}
-
-function LogLine({ entry }: { entry: LogEntry }) {
-  return (
-    <div className="flex gap-3 text-[13px] leading-relaxed">
-      <span className="shrink-0 text-zinc-600 tabular-nums w-20">{entry.time}</span>
-      <span className="text-zinc-300 break-all">{entry.message}</span>
-    </div>
-  )
+    return JSON.stringify(
+      payload,
+      (_, value) => {
+        if (value instanceof MediaStream) return { kind: 'MediaStream', id: value.id, active: value.active }
+        if (value instanceof Error) return { name: value.name, message: value.message }
+        return value
+      },
+      2,
+    )
+  } catch {
+    return String(payload)
+  }
 }
 
 export default function App() {
-  const saved = loadSaved()
-  const [orgCode, setOrgCode] = useState(saved.orgCode)
-  const [sessionId, setSessionId] = useState(saved.sessionId)
-  const [token, setToken] = useState(saved.token)
-  const [state, setState] = useState<SessionState>('idle')
+  let overlayContainer: HTMLDivElement | undefined
+  let nextLogId = 0
+  const sentinelWithWildcard = Sentinel as typeof Sentinel & WildcardSentinel
+
+  const [config, setConfig] = useState<DemoConfig>(DEFAULTS)
+  const [isOverlayMounted, setIsOverlayMounted] = useState(false)
+  const [sessionState, setSessionState] = useState<SessionState>(Sentinel.getState())
   const [logs, setLogs] = useState<LogEntry[]>([])
-  const [active, setActive] = useState(false)
-  const overlayRef = useRef<{ unmount: () => void } | null>(null)
-  const logRef = useRef<HTMLDivElement>(null)
-  const sentinelRef = useRef(Sentinel)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [isBusy, setIsBusy] = useState(false)
+
+  const addLog = useCallback((event: string, payload: unknown) => {
+    const timestamp = new Date().toLocaleTimeString('en-IN', { hour12: false })
+    const entry: LogEntry = {
+      id: nextLogId++,
+      event,
+      timestamp,
+      detail: formatEventDetail(payload),
+    }
+    setLogs(current => [entry, ...current].slice(0, 40))
+  }, [])
+
+  const updateConfig = useCallback((key: keyof DemoConfig, value: string) => {
+    setConfig(current => ({ ...current, [key]: value }))
+  }, [])
+
+  const stateTone = useMemo<'good' | 'warn' | 'bad' | 'neutral'>(() => {
+    switch (sessionState) {
+      case 'running': return 'good'
+      case 'setup-in-progress':
+      case 'paused': return 'warn'
+      case 'failed': return 'bad'
+      default: return 'neutral'
+    }
+  }, [sessionState])
+
+  const canStart = useMemo(
+    () => !isBusy && !isOverlayMounted && sessionState !== 'running' && sessionState !== 'setup-in-progress'
+      && config.orgCode.trim() !== '' && config.sessionId.trim() !== '' && config.token.trim() !== '',
+    [isBusy, isOverlayMounted, sessionState, config],
+  )
+
+  const canPause = useMemo(() => !isBusy && sessionState === 'running', [isBusy, sessionState])
+  const canResume = useMemo(() => !isBusy && sessionState === 'paused', [isBusy, sessionState])
+  const canStop = useMemo(() => !isBusy && (sessionState === 'running' || sessionState === 'paused'), [isBusy, sessionState])
+  const canReset = useMemo(() => !isBusy && sessionState !== 'setup-in-progress', [isBusy, sessionState])
+
+  const startSentinel = useCallback(async () => {
+    setErrorMessage(null)
+    setIsBusy(true)
+    setIsOverlayMounted(true)
+    try {
+      const currentState = Sentinel.getState()
+      if (currentState === 'failed' || currentState === 'stopped') {
+        Sentinel.reset()
+      }
+      if (Sentinel.getState() === 'idle') {
+        Sentinel.init(config)
+        addLog('session:stateChanged', 'Initialized demo config')
+      } else {
+        await Sentinel.start()
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setErrorMessage(message)
+      addLog('setup:failed', { message })
+    } finally {
+      setSessionState(Sentinel.getState())
+      setIsBusy(false)
+    }
+  }, [config, addLog])
+
+  const pauseSentinel = useCallback(() => {
+    Sentinel.pause()
+    setSessionState(Sentinel.getState())
+  }, [])
+
+  const resumeSentinel = useCallback(async () => {
+    await startSentinel()
+  }, [startSentinel])
+
+  const stopSentinel = useCallback(() => {
+    setIsBusy(true)
+    try {
+      Sentinel.stop()
+      setSessionState(Sentinel.getState())
+      addLog('session:stateChanged', 'Sentinel stopped')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setErrorMessage(message)
+    } finally {
+      setIsBusy(false)
+    }
+  }, [addLog])
+
+  const resetSentinel = useCallback(() => {
+    setErrorMessage(null)
+    try {
+      Sentinel.reset()
+      setIsOverlayMounted(false)
+      setSessionState(Sentinel.getState())
+      addLog('session:stateChanged', 'Sentinel reset to idle')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setErrorMessage(message)
+    }
+  }, [addLog])
 
   useEffect(() => {
-    if (!logRef.current) return
-    logRef.current.scrollTop = logRef.current.scrollHeight
-  }, [logs])
-
-  const log = useCallback((message: string) => {
-    setLogs(p => [...p, { time: new Date().toLocaleTimeString(), message }])
+    setConfig(readConfigFromQuery())
   }, [])
 
-  const handleLaunch = useCallback(() => {
-    save(orgCode, sessionId, token)
-    setActive(true)
-    const s = sentinelRef.current
-
-    s.on('*', ((event: string, payload?: unknown) => {
-      const p = payload ? ` ${JSON.stringify(payload)}` : ''
-      log(`[event] ${event}${p}`)
-    }) as any)
-
-    s.on('session:stateChanged', (st: SessionState) => {
-      setState(st)
+  useEffect(() => {
+    if (!isOverlayMounted || !overlayContainer) return
+    const overlay = mountSentinelOverlay({
+      container: overlayContainer,
+      sentinel: Sentinel,
+      config: {
+        consent: { enabled: true },
+        sessionMonitor: { position: 'bottom-right' as const },
+        theme: 'system' as const,
+      },
     })
 
-    s.init({ orgCode, sessionId, token })
-    log('Sentinel.init() ✓')
+    const unsubscribe = sentinelWithWildcard.on('*', (eventName, payload) => {
+      if (eventName === 'session:stateChanged') {
+        setSessionState(payload as SessionState)
+      }
+      addLog(eventName, payload)
+    })
 
-    const container = document.getElementById('sentinel-overlay')!
-    const overlay = mountSentinelOverlay({ container, sentinel: s })
-    overlayRef.current = overlay
-    log('mountSentinelOverlay() ✓')
-  }, [orgCode, sessionId, token, log])
-
-  const handleReset = useCallback(() => {
-    if (overlayRef.current) {
-      overlayRef.current.unmount()
-      overlayRef.current = null
+    return () => {
+      unsubscribe()
+      overlay.unmount()
     }
-    sentinelRef.current.reset()
-    setState('idle')
-    setLogs([])
-    setActive(false)
-  }, [])
-
-  const badge = BADGES[state]
+  }, [isOverlayMounted, addLog])
 
   return (
-    <div className="min-h-dvh bg-zinc-950 text-zinc-100 flex flex-col">
-      {/* ── header ── */}
-      <header className="border-b border-zinc-800 px-5 py-3 flex items-center gap-3">
-        <span className="size-2 rounded-full bg-teal-400" />
-        <h1 className="text-sm font-semibold tracking-tight">Sentinel Demo</h1>
-        <span className="ml-auto text-[13px] text-zinc-500">
-          <span className="hidden sm:inline">@testpress/sentinel-ui </span>v1.0.0
-        </span>
-      </header>
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(120,231,213,0.14),transparent_24%),radial-gradient(circle_at_top_right,rgba(81,154,255,0.16),transparent_28%),linear-gradient(180deg,#07101d_0%,#0d1729_52%,#07101d_100%)] px-4 py-6 text-[#ebf1ff] sm:px-6 sm:py-10">
+      <div className="mx-auto w-full max-w-[1440px]">
+        <DevHero sessionState={sessionState} stateTone={stateTone} />
 
-      {/* ── body ── */}
-      <main className="flex-1 flex flex-col lg:flex-row gap-0">
-        {/* ─── panel — form ─── */}
-        <section className="w-full lg:w-96 shrink-0 border-b lg:border-b-0 lg:border-r border-zinc-800 p-5 space-y-4">
-          <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-widest">Credentials</h2>
-
-          <Field label="Org Code" placeholder="acme-university" value={orgCode} onChange={setOrgCode} disabled={active} />
-          <Field label="Session ID" placeholder="sess_abc123" value={sessionId} onChange={setSessionId} disabled={active} />
-          <Field label="Token" placeholder="tp_xxxxxxxx" value={token} onChange={setToken} disabled={active} secret />
-
-          <div className="flex gap-2 pt-1">
-            <button
-              onClick={handleLaunch}
-              disabled={!orgCode || !sessionId || !token || active}
-              className="flex-1 rounded-lg bg-teal-500 px-4 py-2 text-sm font-medium text-white hover:bg-teal-400 disabled:opacity-30 disabled:pointer-events-none transition"
-            >
-              {active ? 'Sentinel Active' : 'Launch Sentinel'}
-            </button>
-            <button
-              onClick={handleReset}
-              disabled={!active}
-              className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-25 disabled:pointer-events-none transition"
-            >
-              Reset
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2 text-[13px] text-zinc-500">
-            Session state
-            <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold text-white ${badge.bg}`}>
-              {badge.label}
-            </span>
-          </div>
+        <section className="grid items-start gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+          <ConfigPanel
+            config={config}
+            flags={{ canStart, canPause, canResume, canStop, canReset }}
+            errorMessage={errorMessage}
+            sessionState={sessionState}
+            onConfigChange={updateConfig}
+            actions={{
+              onStart: () => void startSentinel(),
+              onPause: pauseSentinel,
+              onResume: () => void resumeSentinel(),
+              onStop: stopSentinel,
+              onReset: resetSentinel,
+            }}
+          />
+          <StatePanel config={config} sessionState={sessionState} />
+          <EventLogPanel logs={logs} onClearLogs={() => setLogs([])} />
         </section>
+      </div>
 
-        {/* ─── right column ─── */}
-        <div className="flex-1 flex flex-col min-w-0">
-          {/* overlay mount */}
-          <div
-            id="sentinel-overlay"
-            className="relative min-h-[140px] border-b border-zinc-800 bg-gradient-to-b from-zinc-900 to-zinc-950 flex items-center justify-center"
-          >
-            {!active && (
-              <div className="text-center select-none">
-                <div className="text-2xl mb-1 opacity-20">🛡</div>
-                <p className="text-xs text-zinc-600">Overlay renders here once launched</p>
-              </div>
-            )}
-          </div>
-
-          {/* event log */}
-          <div className="flex-1 flex flex-col min-h-0">
-            <div className="flex items-center justify-between px-5 py-2.5 border-b border-zinc-800">
-              <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-widest">Event Log</h2>
-              {logs.length > 0 && (
-                <button
-                  onClick={() => setLogs([])}
-                  className="text-[13px] text-zinc-600 hover:text-zinc-400 transition"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-            <div ref={logRef} className="flex-1 overflow-y-auto p-5 space-y-1.5 font-mono text-[13px]">
-              {logs.length === 0 && (
-                <p className="text-zinc-600 text-sm font-sans">
-                  Fill in the credentials and click <span className="text-teal-400">Launch Sentinel</span> to begin.
-                </p>
-              )}
-              {logs.map((entry, i) => (
-                <LogLine key={i} entry={entry} />
-              ))}
-            </div>
-          </div>
-        </div>
-      </main>
-    </div>
-  )
-}
-
-/* ─── reusable field ─── */
-
-function Field({
-  label,
-  placeholder,
-  value,
-  onChange,
-  disabled,
-  secret,
-}: {
-  label: string
-  placeholder: string
-  value: string
-  onChange: (v: string) => void
-  disabled: boolean
-  secret?: boolean
-}) {
-  return (
-    <div>
-      <label className="block text-[13px] font-medium text-zinc-400 mb-1">{label}</label>
-      <input
-        className={`w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition
-          focus:border-teal-500 focus:ring-1 focus:ring-teal-500
-          disabled:opacity-40 disabled:cursor-not-allowed
-          ${secret ? 'font-mono tracking-wider' : ''}`}
-        placeholder={placeholder}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        type={secret ? 'password' : 'text'}
-        disabled={disabled}
-      />
-    </div>
+      <div ref={el => { overlayContainer = el ?? undefined }} />
+    </main>
   )
 }
